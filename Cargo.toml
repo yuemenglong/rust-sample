@@ -1,0 +1,7 @@
+[package]
+name = "crawl"
+version = "0.1.0"
+authors = ["yml <yuemenglong@126.com>"]
+
+[dependencies]
+hyper = "0.9.13"
