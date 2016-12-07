@@ -69,14 +69,14 @@ pub fn escape_default(s: &str) -> String {
 }
 
 fn main() {
-    let mut bytes = "<html><head></head><body></body></html>".as_bytes();
+    let mut bytes = "<html><head></head><body><div class='class classa'></div></body></html>".as_bytes();
     let dom = rquery::load(&mut bytes);
-    rquery::selector("div.className#id #child", &dom);
+    rquery::selector("div.class", &dom);
     return;
     // let stdin = io::stdin();
     // let mut input = "<html></html>";
-    let mut bytes = "<html><head></head><body></body></html>".as_bytes();
-    let dom = rquery::load(&mut bytes);
+    // let mut bytes = "<html><head></head><body></body></html>".as_bytes();
+    // let dom = rquery::load(&mut bytes);
     // let dom = parse_document(RcDom::default(), Default::default())
     //     .from_bytes(Default::default())
     //     .read_from(&mut bytes)
@@ -84,7 +84,7 @@ fn main() {
     // .from_utf8()
     // .read_from(&mut stdin.lock())
     // .unwrap();
-    walk(0, dom.document);
+    // walk(0, dom.document);
     // .process("<html></html>".to_tendril());
     // println!("{:?}", dom.document);
     // if !dom.errors.is_empty() {
