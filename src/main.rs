@@ -25,6 +25,7 @@ use std::io;
 use std::iter::repeat;
 use std::default::Default;
 use std::string::String;
+use regex::Regex;
 
 use tendril::TendrilSink;
 use html5ever::parse_document;
@@ -68,10 +69,28 @@ pub fn escape_default(s: &str) -> String {
     s.chars().flat_map(|c| c.escape_default()).collect()
 }
 
+static HTML:&'static str = "
+<html>
+<head>
+</head>
+<body>
+<div id='id' class='class'>
+    <div id='inner'></div>
+</div>
+</body>
+</html>
+";
+
 fn main() {
-    let mut bytes = "<html><head></head><body><div class='class classa'></div></body></html>".as_bytes();
+    // let str = "div[id]";
+    // for (start, end) in Regex::new(r"[\[\]]\w+").unwrap().find_iter(str){
+    //     println!("{:?}", &str[start..end]);
+    // }
+
+
+    let mut bytes = HTML.as_bytes();
     let dom = rquery::load(&mut bytes);
-    rquery::selector("div.class", &dom);
+    rquery::selector("div[id]", &dom);
     return;
     // let stdin = io::stdin();
     // let mut input = "<html></html>";
