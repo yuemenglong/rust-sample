@@ -17,7 +17,7 @@ use tendril::TendrilSink;
 
 use html5ever::parse_document;
 use html5ever::Attribute;
-use html5ever::QualName;
+// use html5ever::QualName;
 
 use html5ever::rcdom::RcDom;
 // use html5ever::rcdom::Handle;
@@ -25,12 +25,45 @@ use html5ever::rcdom::RcDom;
 // use html5ever::rcdom::{Text, Element};
 use html5ever::rcdom::{Document, Doctype, Text, Comment, Element, Handle, Node};
 
-pub fn load<R: Read>(input: &mut R) -> RcDom {
+pub fn load<R: Read>(input: &mut R) -> Box<Fn(&str)> {
     let dom = parse_document(RcDom::default(), Default::default())
         .from_bytes(Default::default())
         .read_from(input)
         .unwrap();
-    return dom;
+    context_creator(dom.document.deref().clone())
+}
+
+fn context_creator(rc: Rc<RefCell<Node>>) -> Box<Fn(&str)> {
+    Box::new(move |selector: &str| {
+        let re = Regex::new(r"[.#\[\]\w]+").unwrap();
+        let cond_vec = re.find_iter(selector)
+            .map(|(start, end)| Cond::new(&selector[start..end]))
+            .collect();
+        let mut res_vec = Vec::new();
+        walk(rc.clone(), &cond_vec, &mut res_vec);
+        for node in res_vec {
+            node.borrow().debug();
+        }
+    })
+}
+
+#[derive(Debug)]
+struct Result {
+    rc: Rc<RefCell<Node>>,
+}
+
+impl Result {
+    fn new(rc: Rc<RefCell<Node>>) -> Result {
+        Result { rc: rc.clone() }
+    }
+    // fn attr(&self, name: &str) -> Option<&str> {
+    //     let node = self.rc.borrow();
+    //     let attr_map = node.attr_map().unwrap();
+    //     match attr_map.get(name) {
+    //         Some(&value) => Some(value),
+    //         _ => None,
+    //     }
+    // }
 }
 
 #[derive(Debug)]
@@ -47,8 +80,6 @@ impl<'a> CondItem<'a> {
         match &str[0..1] {
             "." => CondItem::Class(&str[1..]),
             "#" => CondItem::Id(&str[1..]),
-            "[" => {
-            },
             _ => CondItem::Tag(&str),
         }
     }
@@ -72,6 +103,7 @@ impl<'a> CondItem<'a> {
             &CondItem::Class(class) => Self::has_class(attrs, class),
             &CondItem::Id(id) => Self::has_attr(attrs, "id", id),
             &CondItem::Attr { name, value } => Self::has_attr(attrs, name, value),
+            _ => false,
         }
     }
 }
@@ -96,7 +128,7 @@ impl<'a> Cond<'a> {
 
 trait NodeKit {
     fn debug(&self);
-    fn get_attr_map(&self) -> Option<HashMap<&str, &str>>;
+    fn attr_map(&self) -> Option<HashMap<&str, &str>>;
 }
 
 fn escape_default(s: &str) -> String {
@@ -121,7 +153,7 @@ impl NodeKit for Node {
             }
         }
     }
-    fn get_attr_map(&self) -> Option<HashMap<&str, &str>> {
+    fn attr_map(&self) -> Option<HashMap<&str, &str>> {
         if let Element(ref name, _, ref attrs) = self.node {
             let mut attr_map: HashMap<&str, &str> = HashMap::new();
             for &Attribute { ref name, ref value } in attrs {
@@ -139,7 +171,7 @@ fn test(rc: Rc<RefCell<Node>>, cond_vec: &Vec<Cond>, cond_pos: usize) -> bool {
     let cond = &cond_vec[cond_pos];
     if let Element(ref name, _, ref attrs) = node.node {
         let name = name.local.as_ref();
-        let attr_map = node.get_attr_map().unwrap();
+        let attr_map = node.attr_map().unwrap();
         let ret = cond.test(name, &attr_map);
         // println!("{:?}", ret);
         match (ret, cond_pos, &node.parent) {

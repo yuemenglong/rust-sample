@@ -8,6 +8,8 @@ extern crate html5ever;
 // use tendril::{ByteTendril, ReadExt};
 use tendril::SliceExt;
 use std::io::Read;
+use std::rc::Rc;
+use std::borrow::Borrow;
 
 // Copyright 2014 The html5ever Project Developers. See the
 // COPYRIGHT file at the top-level directory of this distribution.
@@ -22,6 +24,7 @@ use std::io::Read;
 // extern crate tendril;
 
 use std::io;
+use std::collections::HashMap;
 use std::iter::repeat;
 use std::default::Default;
 use std::string::String;
@@ -33,43 +36,43 @@ use html5ever::rcdom::{Document, Doctype, Text, Comment, Element, RcDom, Handle}
 
 // This is not proper HTML serialization, of course.
 
-fn walk(indent: usize, handle: Handle) {
-    let node = handle.borrow();
-    // FIXME: don't allocate
-    print!("{}", repeat(" ").take(indent).collect::<String>());
-    match node.node {
-        Document => println!("#Document"),
+// fn walk(indent: usize, handle: Handle) {
+//     let node = handle.borrow();
+//     // FIXME: don't allocate
+//     print!("{}", repeat(" ").take(indent).collect::<String>());
+//     match node.node {
+//         Document => println!("#Document"),
 
-        Doctype(ref name, ref public, ref system) => {
-            println!("<!DOCTYPE {} \"{}\" \"{}\">", *name, *public, *system)
-        }
+//         Doctype(ref name, ref public, ref system) => {
+//             println!("<!DOCTYPE {} \"{}\" \"{}\">", *name, *public, *system)
+//         }
 
-        Text(ref text) => println!("#text: {}", escape_default(text)),
+//         Text(ref text) => println!("#text: {}", escape_default(text)),
 
-        Comment(ref text) => println!("<!-- {} -->", escape_default(text)),
+//         Comment(ref text) => println!("<!-- {} -->", escape_default(text)),
 
-        Element(ref name, _, ref attrs) => {
-            // assert!(name.ns == ns!(html));
-            print!("<{}", name.local);
-            for attr in attrs.iter() {
-                //     assert!(attr.name.ns == ns!());
-                print!(" {}=\"{}\"", attr.name.local, attr.value);
-            }
-            println!(">");
-        }
-    }
+//         Element(ref name, _, ref attrs) => {
+//             // assert!(name.ns == ns!(html));
+//             print!("<{}", name.local);
+//             for attr in attrs.iter() {
+//                 //     assert!(attr.name.ns == ns!());
+//                 print!(" {}=\"{}\"", attr.name.local, attr.value);
+//             }
+//             println!(">");
+//         }
+//     }
 
-    for child in node.children.iter() {
-        walk(indent + 4, child.clone());
-    }
-}
+//     for child in node.children.iter() {
+//         walk(indent + 4, child.clone());
+//     }
+// }
 
 // FIXME: Copy of str::escape_default from std, which is currently unstable
 pub fn escape_default(s: &str) -> String {
     s.chars().flat_map(|c| c.escape_default()).collect()
 }
 
-static HTML:&'static str = "
+static HTML: &'static str = "
 <html>
 <head>
 </head>
@@ -81,17 +84,38 @@ static HTML:&'static str = "
 </html>
 ";
 
+struct Person<'a> {
+    name: &'a str,
+}
+
+impl Person {
+    fn get_field_map(&self) -> HashMap<&str, &str> {
+        let mut ret: HashMap<&str, &str> = HashMap::new();
+        ret.insert("name", self.name);
+        ret
+    }
+}
+
+fn get_name(rc: Rc<Person>) -> Option<&str> {
+    let p: &Person = rc.borrow();
+    match p.get_field_map().get("name") {
+        Some(&str) => Some(str),
+        _ => None,
+    }
+}
+
+fn get_name2(p:&Person>) -> Option<&str> {
+    match p.get_field_map().get("name") {
+        Some(&str) => Some(str),
+        _ => None,
+    }
+}
+
 fn main() {
-    // let str = "div[id]";
-    // for (start, end) in Regex::new(r"[\[\]]\w+").unwrap().find_iter(str){
-    //     println!("{:?}", &str[start..end]);
-    // }
-
-
-    let mut bytes = HTML.as_bytes();
-    let dom = rquery::load(&mut bytes);
-    rquery::selector("div[id]", &dom);
+    let rc = Rc::new(Person { name: "hi" });
+    get_name(rc.clone());
     return;
+}
     // let stdin = io::stdin();
     // let mut input = "<html></html>";
     // let mut bytes = "<html><head></head><body></body></html>".as_bytes();
@@ -112,4 +136,4 @@ fn main() {
     //         println!("    {}", err);
     //     }
     // }
-}
+// }
