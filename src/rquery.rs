@@ -51,19 +51,28 @@ fn context_creator(rc: Rc<RefCell<Node>>) -> Box<Fn(&str)> {
 struct Result {
     rc: Rc<RefCell<Node>>,
 }
-
+use html5ever::QualName;
 impl Result {
     fn new(rc: Rc<RefCell<Node>>) -> Result {
         Result { rc: rc.clone() }
     }
-    // fn attr(&self, name: &str) -> Option<&str> {
-    //     let node = self.rc.borrow();
-    //     let attr_map = node.attr_map().unwrap();
-    //     match attr_map.get(name) {
-    //         Some(&value) => Some(value),
-    //         _ => None,
-    //     }
-    // }
+    fn attr<'a>(&'a self, name: &'a str) -> Option<&'a str> {
+        let node = self.rc.borrow();
+        let attr_map = node.attr_map().unwrap();
+        match attr_map.get(name) {
+            // Some(&value) => Some(value),
+            _ => None,
+        }
+        // None
+    }
+    fn test(&self) -> Option<&QualName> {
+        let () = self.rc.deref().borrow();
+        // let node = self.rc.clone().borrow();
+        // if let Element(ref name, _, _) = node.node {
+        //     return Some(name);
+        // }
+        None
+    }
 }
 
 #[derive(Debug)]
@@ -126,16 +135,16 @@ impl<'a> Cond<'a> {
     }
 }
 
-trait NodeKit {
+trait NodeKit<'a> {
     fn debug(&self);
-    fn attr_map(&self) -> Option<HashMap<&str, &str>>;
+    fn attr_map(&'a self) -> Option<HashMap<&'a str, &'a str>>;
 }
 
 fn escape_default(s: &str) -> String {
     s.chars().flat_map(|c| c.escape_default()).collect()
 }
 
-impl NodeKit for Node {
+impl<'a> NodeKit<'a> for Node {
     fn debug(&self) {
         match self.node {
             Document => println!("Document"),
@@ -153,7 +162,7 @@ impl NodeKit for Node {
             }
         }
     }
-    fn attr_map(&self) -> Option<HashMap<&str, &str>> {
+    fn attr_map(&'a self) -> Option<HashMap<&'a str, &'a str>> {
         if let Element(ref name, _, ref attrs) = self.node {
             let mut attr_map: HashMap<&str, &str> = HashMap::new();
             for &Attribute { ref name, ref value } in attrs {

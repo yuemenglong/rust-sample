@@ -24,11 +24,11 @@ use std::borrow::Borrow;
 // extern crate tendril;
 
 use std::io;
-use std::collections::HashMap;
 use std::iter::repeat;
 use std::default::Default;
 use std::string::String;
 use regex::Regex;
+use std::mem::drop;
 
 use tendril::TendrilSink;
 use html5ever::parse_document;
@@ -84,56 +84,95 @@ static HTML: &'static str = "
 </html>
 ";
 
+// struct Person<'a> {
+//     name: &'a str,
+// }
+
+// trait PersonTrait {
+//     // add code here
+//     fn get_field_map(&self) -> HashMap<&str, &str>;
+// }
+
+// impl<'a> PersonTrait for Person<'a> {
+//     fn get_field_map(&self) -> HashMap<&'a str, &'a str> {
+//         let mut ret: HashMap<&str, &str> = HashMap::new();
+//         ret.insert("name", self.name);
+//         ret
+//     }
+// }
+
+// fn get_name(rc: Rc<Person>) -> Option<&str> {
+//     let p: &Person = rc.borrow();
+//     match p.get_field_map().get("name") {
+//         Some(&str) => Some(str),
+//         _ => None,
+//     }
+// }
+
+// fn get_name2<'a>(p: &'a Person) -> Option<&'a str> {
+//     match p.get_field_map().get("name") {
+//         Some(&str) => Some(str),
+//         _ => None,
+//     }
+// }
+
+// fn get_name() -> &'static str {
+//     let local = String::from("bill");
+//     &local
+// }
+use std::collections::HashMap;
+use std::cell::RefCell;
+use std::ops::Deref;
 struct Person<'a> {
     name: &'a str,
 }
-
-impl Person {
-    fn get_field_map(&self) -> HashMap<&str, &str> {
-        let mut ret: HashMap<&str, &str> = HashMap::new();
+trait PersonTrait<'a> {
+    fn get_field_map(&self) -> HashMap<&'a str, &'a str>;
+}
+impl<'a> PersonTrait<'a> for Person<'a> {
+    fn get_field_map(&self) -> HashMap<&'a str, &'a str> {
+        let mut ret = HashMap::new();
         ret.insert("name", self.name);
         ret
     }
 }
 
-fn get_name(rc: Rc<Person>) -> Option<&str> {
-    let p: &Person = rc.borrow();
-    match p.get_field_map().get("name") {
-        Some(&str) => Some(str),
-        _ => None,
-    }
-}
-
-fn get_name2(p:&Person>) -> Option<&str> {
-    match p.get_field_map().get("name") {
-        Some(&str) => Some(str),
-        _ => None,
-    }
+fn get(rc: Rc<RefCell<Person>>) -> Option<&str> {
+    let p:&RefCell<Person> = rc.borrow();
+    let p = p.borrow();
+    Some(p.name)
 }
 
 fn main() {
-    let rc = Rc::new(Person { name: "hi" });
-    get_name(rc.clone());
-    return;
+    let name = &String::from("bill");
+    let rc = Rc::new(RefCell::new(Person { name: name }));
+    get(rc.clone());
 }
-    // let stdin = io::stdin();
-    // let mut input = "<html></html>";
-    // let mut bytes = "<html><head></head><body></body></html>".as_bytes();
-    // let dom = rquery::load(&mut bytes);
-    // let dom = parse_document(RcDom::default(), Default::default())
-    //     .from_bytes(Default::default())
-    //     .read_from(&mut bytes)
-    //     .unwrap();
-    // .from_utf8()
-    // .read_from(&mut stdin.lock())
-    // .unwrap();
-    // walk(0, dom.document);
-    // .process("<html></html>".to_tendril());
-    // println!("{:?}", dom.document);
-    // if !dom.errors.is_empty() {
-    //     println!("\nParse errors:");
-    //     for err in dom.errors.into_iter() {
-    //         println!("    {}", err);
-    //     }
-    // }
+// let s: &str;
+// {
+//     let rc = Rc::new(Person { name: "hi" });
+//     s = get_name(rc.clone()).unwrap();
+// }
+// println!("{:?}", s);
+// return;
+// let stdin = io::stdin();
+// let mut input = "<html></html>";
+// let mut bytes = "<html><head></head><body></body></html>".as_bytes();
+// let dom = rquery::load(&mut bytes);
+// let dom = parse_document(RcDom::default(), Default::default())
+//     .from_bytes(Default::default())
+//     .read_from(&mut bytes)
+//     .unwrap();
+// .from_utf8()
+// .read_from(&mut stdin.lock())
+// .unwrap();
+// walk(0, dom.document);
+// .process("<html></html>".to_tendril());
+// println!("{:?}", dom.document);
+// if !dom.errors.is_empty() {
+//     println!("\nParse errors:");
+//     for err in dom.errors.into_iter() {
+//         println!("    {}", err);
+//     }
+// }
 // }
