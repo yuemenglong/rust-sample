@@ -25,7 +25,7 @@ use html5ever::rcdom::RcDom;
 // use html5ever::rcdom::{Text, Element};
 use html5ever::rcdom::{Document, Doctype, Text, Comment, Element, Handle, Node};
 
-pub fn load<R: Read>(input: &mut R) -> Box<Fn(&str)> {
+pub fn load<R: Read>(input: &mut R) -> Box<Fn(&str) -> Vec<NodeWrap>> {
     let dom = parse_document(RcDom::default(), Default::default())
         .from_bytes(Default::default())
         .read_from(input)
@@ -33,45 +33,48 @@ pub fn load<R: Read>(input: &mut R) -> Box<Fn(&str)> {
     context_creator(dom.document.deref().clone())
 }
 
-fn context_creator(rc: Rc<RefCell<Node>>) -> Box<Fn(&str)> {
-    Box::new(move |selector: &str| {
+fn context_creator(rc: Rc<RefCell<Node>>) -> Box<Fn(&str) -> Vec<NodeWrap>> {
+    Box::new(move |selector: &str| -> Vec<NodeWrap> {
         let re = Regex::new(r"[.#\[\]\w]+").unwrap();
+        // Get Cond From Selector String
         let cond_vec = re.find_iter(selector)
             .map(|(start, end)| Cond::new(&selector[start..end]))
             .collect();
+        // Traverse All Node To Get Matched, Save To res_vec
         let mut res_vec = Vec::new();
         walk(rc.clone(), &cond_vec, &mut res_vec);
-        for node in res_vec {
-            node.borrow().debug();
+        for rc in &res_vec {
+            rc.borrow().debug();
         }
+        res_vec.iter().map(|rc| NodeWrap { rc: rc.clone() }).collect()
     })
 }
 
+fn walk(rc: Rc<RefCell<Node>>, cond_vec: &Vec<Cond>, res_vec: &mut Vec<Rc<RefCell<Node>>>) {
+    if test(rc.clone(), cond_vec, cond_vec.len() - 1) {
+        res_vec.push(rc.clone());
+    }
+    let node = rc.borrow();
+    for child in node.children.iter() {
+        walk(child.deref().clone(), cond_vec, res_vec);
+    }
+}
+
 #[derive(Debug)]
-struct Result {
+pub struct NodeWrap {
     rc: Rc<RefCell<Node>>,
 }
-use html5ever::QualName;
-impl Result {
-    fn new(rc: Rc<RefCell<Node>>) -> Result {
-        Result { rc: rc.clone() }
+impl NodeWrap {
+    fn new(rc: Rc<RefCell<Node>>) -> NodeWrap {
+        NodeWrap { rc: rc.clone() }
     }
-    fn attr<'a>(&'a self, name: &'a str) -> Option<&'a str> {
+    fn attr<'a>(&'a self, name: &'a str) -> Option<String> {
         let node = self.rc.borrow();
         let attr_map = node.attr_map().unwrap();
         match attr_map.get(name) {
-            // Some(&value) => Some(value),
+            Some(ref value) => Some(value.to_string()),
             _ => None,
         }
-        // None
-    }
-    fn test(&self) -> Option<&QualName> {
-        let () = self.rc.deref().borrow();
-        // let node = self.rc.clone().borrow();
-        // if let Element(ref name, _, _) = node.node {
-        //     return Some(name);
-        // }
-        None
     }
 }
 
@@ -199,15 +202,6 @@ fn test(rc: Rc<RefCell<Node>>, cond_vec: &Vec<Cond>, cond_pos: usize) -> bool {
     }
 }
 
-fn walk(rc: Rc<RefCell<Node>>, cond_vec: &Vec<Cond>, res_vec: &mut Vec<Rc<RefCell<Node>>>) {
-    if test(rc.clone(), cond_vec, cond_vec.len() - 1) {
-        res_vec.push(rc.clone());
-    }
-    let node = rc.borrow();
-    for child in node.children.iter() {
-        walk(child.deref().clone(), cond_vec, res_vec);
-    }
-}
 
 pub fn selector(selector: &str, dom: &RcDom) {
     let re = Regex::new(r"[.#\[\]\w]+").unwrap();
