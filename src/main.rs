@@ -1,16 +1,3 @@
-mod rquery;
-
-extern crate regex;
-extern crate tendril;
-extern crate html5ever;
-
-// use tendril::{StrTendril, SliceExt};
-// use tendril::{ByteTendril, ReadExt};
-use tendril::SliceExt;
-use std::io::Read;
-use std::rc::Rc;
-use std::borrow::Borrow;
-
 // Copyright 2014 The html5ever Project Developers. See the
 // COPYRIGHT file at the top-level directory of this distribution.
 //
@@ -20,159 +7,101 @@ use std::borrow::Borrow;
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// #[macro_use] extern crate html5ever_atoms;
-// extern crate tendril;
+#[macro_use]
+extern crate html5ever;
+extern crate tendril;
 
 use std::io;
 use std::iter::repeat;
 use std::default::Default;
 use std::string::String;
-use regex::Regex;
-use std::mem::drop;
 
 use tendril::TendrilSink;
 use html5ever::parse_document;
-use html5ever::rcdom::{Document, Doctype, Text, Comment, Element, RcDom, Handle};
-
+use html5ever::rcdom::{Document, Doctype, Text as SysText, Comment, Element as SysElement, RcDom,
+                       Handle};
+use std::rc::Weak;
+use std::rc::Rc;
+use std::cell::Cell;
+use std::cell::RefCell;
 // This is not proper HTML serialization, of course.
 
-// fn walk(indent: usize, handle: Handle) {
-//     let node = handle.borrow();
-//     // FIXME: don't allocate
-//     print!("{}", repeat(" ").take(indent).collect::<String>());
-//     match node.node {
-//         Document => println!("#Document"),
+#[derive(Debug)]
+struct Node {
+    parent: RefCell<Option<Weak<Node>>>,
+    node: String,
+    children: Vec<Rc<Node>>,
+}
 
-//         Doctype(ref name, ref public, ref system) => {
-//             println!("<!DOCTYPE {} \"{}\" \"{}\">", *name, *public, *system)
-//         }
+impl Node {
+    fn new(node: &str) -> Node {
+        Node {
+            parent: RefCell::new(None),
+            node: node.to_string(),
+            children: Vec::new(),
+        }
+    }
+}
 
-//         Text(ref text) => println!("#text: {}", escape_default(text)),
+fn walk(indent: usize, handle: Handle) {
+    let handle = handle.borrow();
+    // FIXME: don't allocate
+    print!("{}", repeat(" ").take(indent).collect::<String>());
+    let mut node = "".to_string();
 
-//         Comment(ref text) => println!("<!-- {} -->", escape_default(text)),
+    match handle.node {
+        Document => {
+            println!("#Document");
+        }
+        Doctype(ref name, ref public, ref system) => {
+            println!("<!DOCTYPE {} \"{}\" \"{}\">", *name, *public, *system);
+        }
+        SysText(ref text) => {
+            println!("#text: {}", escape_default(text));
+        }
+        Comment(ref text) => {
+            node = escape_default(text).to_string();
+            println!("<!-- {} -->", escape_default(text));
+        }
+        SysElement(ref name, _, ref attrs) => {
+            node = name.local.to_string();
+            print!("<{}", name.local);
+            for attr in attrs.iter() {
+                print!(" {}=\"{}\"", attr.name.local, attr.value);
+            }
+            println!(">");
+        }
+    }
 
-//         Element(ref name, _, ref attrs) => {
-//             // assert!(name.ns == ns!(html));
-//             print!("<{}", name.local);
-//             for attr in attrs.iter() {
-//                 //     assert!(attr.name.ns == ns!());
-//                 print!(" {}=\"{}\"", attr.name.local, attr.value);
-//             }
-//             println!(">");
-//         }
-//     }
-
-//     for child in node.children.iter() {
-//         walk(indent + 4, child.clone());
-//     }
-// }
+    for child in handle.children.iter() {
+        walk(indent + 4, child.clone());
+    }
+}
 
 // FIXME: Copy of str::escape_default from std, which is currently unstable
 pub fn escape_default(s: &str) -> String {
     s.chars().flat_map(|c| c.escape_default()).collect()
 }
 
-static HTML: &'static str = "
-<html>
-<head>
-</head>
-<body>
-<div id='id' class='class'>
-    <div id='inner'></div>
-</div>
-</body>
-</html>
-";
 
-// struct Person<'a> {
-//     name: &'a str,
-// }
-
-// trait PersonTrait {
-//     // add code here
-//     fn get_field_map(&self) -> HashMap<&str, &str>;
-// }
-
-// impl<'a> PersonTrait for Person<'a> {
-//     fn get_field_map(&self) -> HashMap<&'a str, &'a str> {
-//         let mut ret: HashMap<&str, &str> = HashMap::new();
-//         ret.insert("name", self.name);
-//         ret
-//     }
-// }
-
-// fn get_name(rc: Rc<Person>) -> Option<&str> {
-//     let p: &Person = rc.borrow();
-//     match p.get_field_map().get("name") {
-//         Some(&str) => Some(str),
-//         _ => None,
-//     }
-// }
-
-// fn get_name2<'a>(p: &'a Person) -> Option<&'a str> {
-//     match p.get_field_map().get("name") {
-//         Some(&str) => Some(str),
-//         _ => None,
-//     }
-// }
-
-// fn get_name() -> &'static str {
-//     let local = String::from("bill");
-//     &local
-// }
-use std::collections::HashMap;
-use std::cell::RefCell;
-use std::ops::Deref;
-struct Person<'a> {
-    name: &'a str,
-}
-trait PersonTrait<'a> {
-    fn get_field_map(&self) -> HashMap<&'a str, &'a str>;
-}
-impl<'a> PersonTrait<'a> for Person<'a> {
-    fn get_field_map(&self) -> HashMap<&'a str, &'a str> {
-        let mut ret = HashMap::new();
-        ret.insert("name", self.name);
-        ret
-    }
-}
-
-fn get(rc: Rc<RefCell<Person>>) -> Option<&str> {
-    let p:&RefCell<Person> = rc.borrow();
-    let p = p.borrow();
-    Some(p.name)
-}
 
 fn main() {
-    let name = &String::from("bill");
-    let rc = Rc::new(RefCell::new(Person { name: name }));
-    get(rc.clone());
+    let mut rc = Rc::new(Node {
+        parent: RefCell::new(None),
+        node: "asfd".to_string(),
+        children: Vec::new(),
+    });
+    // let stdin = io::stdin();
+    // let dom = parse_document(RcDom::default(), Default::default())
+    //     .from_utf8()
+    //     .read_from(&mut stdin.lock())
+    //     .unwrap();
+    // walk(0, dom.document);
+
+    // if !dom.errors.is_empty() {
+    //     println!("\nParse errors:");
+    //     for err in dom.errors.into_iter() {
+    //         println!("    {}", err);
+    //     }
+    // }
 }
-// let s: &str;
-// {
-//     let rc = Rc::new(Person { name: "hi" });
-//     s = get_name(rc.clone()).unwrap();
-// }
-// println!("{:?}", s);
-// return;
-// let stdin = io::stdin();
-// let mut input = "<html></html>";
-// let mut bytes = "<html><head></head><body></body></html>".as_bytes();
-// let dom = rquery::load(&mut bytes);
-// let dom = parse_document(RcDom::default(), Default::default())
-//     .from_bytes(Default::default())
-//     .read_from(&mut bytes)
-//     .unwrap();
-// .from_utf8()
-// .read_from(&mut stdin.lock())
-// .unwrap();
-// walk(0, dom.document);
-// .process("<html></html>".to_tendril());
-// println!("{:?}", dom.document);
-// if !dom.errors.is_empty() {
-//     println!("\nParse errors:");
-//     for err in dom.errors.into_iter() {
-//         println!("    {}", err);
-//     }
-// }
-// }

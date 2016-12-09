@@ -4,7 +4,8 @@ version = "0.1.0"
 authors = ["yml <yuemenglong@126.com>"]
 
 [dependencies]
+html5ever = "*"
 hyper = "0.9.13"
 tendril = "0.2.3"
-html5ever = "*"
 regex = "*"
+string_cache = "*"
