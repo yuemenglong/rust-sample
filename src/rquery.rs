@@ -107,66 +107,6 @@
 //     }
 // }
 
-// #[derive(Debug)]
-// enum CondItem<'a> {
-//     Tag(&'a str),
-//     Class(&'a str),
-//     Id(&'a str),
-//     HasAttr(&'a str),
-//     Attr { name: &'a str, value: &'a str },
-// }
-
-// impl<'a> CondItem<'a> {
-//     fn new(str: &'a str) -> CondItem<'a> {
-//         match &str[0..1] {
-//             "." => CondItem::Class(&str[1..]),
-//             "#" => CondItem::Id(&str[1..]),
-//             _ => CondItem::Tag(&str),
-//         }
-//     }
-//     fn has_class(attrs: &HashMap<&str, &str>, class: &str) -> bool {
-//         if let Some(&class_string) = attrs.get("class") {
-//             return class_string.split(" ").any(|str| str == class);
-//         } else {
-//             return false;
-//         }
-//     }
-//     fn has_attr(attrs: &HashMap<&str, &str>, name: &str, value: &str) -> bool {
-//         if let Some(&attr_value) = attrs.get(name) {
-//             return attr_value == value;
-//         } else {
-//             return false;
-//         }
-//     }
-//     fn test(&self, tag: &str, attrs: &HashMap<&str, &str>) -> bool {
-//         match self {
-//             &CondItem::Tag(name) => name == tag,
-//             &CondItem::Class(class) => Self::has_class(attrs, class),
-//             &CondItem::Id(id) => Self::has_attr(attrs, "id", id),
-//             &CondItem::Attr { name, value } => Self::has_attr(attrs, name, value),
-//             _ => false,
-//         }
-//     }
-// }
-
-// #[derive(Debug)]
-// struct Cond<'a> {
-//     vec: Vec<CondItem<'a>>,
-// }
-
-// impl<'a> Cond<'a> {
-//     fn new(str: &'a str) -> Cond<'a> {
-//         let re = Regex::new(r"([.#]?[^.#\[\]]+)|(\[\w+\])").unwrap();
-//         let vec = re.find_iter(str)
-//             .map(|(start, end)| CondItem::new(&str[start..end]))
-//             .collect::<Vec<CondItem>>();
-//         Cond { vec: vec }
-//     }
-//     fn test(&self, tag: &str, attrs: &HashMap<&str, &str>) -> bool {
-//         self.vec.iter().all(|ref item| item.test(&tag, &attrs))
-//     }
-// }
-
 // trait SysNodeKit<'a> {
 //     fn debug(&self);
 //     fn attr_map(&'a self) -> Option<HashMap<&'a str, &'a str>>;

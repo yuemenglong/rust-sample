@@ -10,6 +10,7 @@
 #[macro_use]
 extern crate html5ever;
 extern crate tendril;
+extern crate regex;
 
 use std::io;
 use std::iter::repeat;
@@ -28,6 +29,8 @@ use std::cell::Cell;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::borrow::BorrowMut;
+use std::io::Read;
+use regex::Regex;
 // This is not proper HTML serialization, of course.
 
 #[derive(Debug)]
@@ -56,10 +59,13 @@ enum NodeEnum {
     Element(String, HashMap<String, String>),
 }
 
-fn walk(indent: usize, handle: Handle) -> Rc<Node> {
+fn parse(handle: Handle) -> Rc<Node> {
+    fn escape_default(s: &str) -> String {
+        s.chars().flat_map(|c| c.escape_default()).collect()
+    }
+
     let handle = handle.borrow();
     // FIXME: don't allocate
-    print!("{}", repeat(" ").take(indent).collect::<String>());
     let mut content = match handle.node {
         SysDocument => {
             println!("#Document");
@@ -93,30 +99,135 @@ fn walk(indent: usize, handle: Handle) -> Rc<Node> {
     };
     let rc = Rc::new(Node::new(content));
     for child in handle.children.iter() {
-        let childNode = walk(indent + 4, child.clone());
+        let childNode = parse(child.clone());
         *childNode.parent.borrow_mut() = Some(Rc::downgrade(&rc));
         rc.children.borrow_mut().push(childNode);
     }
     rc
 }
 
-// FIXME: Copy of str::escape_default from std, which is currently unstable
-pub fn escape_default(s: &str) -> String {
-    s.chars().flat_map(|c| c.escape_default()).collect()
+static HTML: &'static str = "
+<html>
+<head>
+</head>
+<body>
+<div id='container'>
+    <div class='cch'></div>
+</div>
+</body>
+</html>
+";
+
+
+#[derive(Debug)]
+enum CondItem<'a> {
+    Tag(&'a str),
+    Class(&'a str),
+    Id(&'a str),
+    HasAttr(&'a str),
+    Attr { name: &'a str, value: &'a str },
 }
 
-struct Person {
-    age: i32,
+impl<'a> CondItem<'a> {
+    fn new(str: &'a str) -> CondItem<'a> {
+        match &str[0..1] {
+            "." => CondItem::Class(&str[1..]),
+            "#" => CondItem::Id(&str[1..]),
+            _ => CondItem::Tag(&str),
+        }
+    }
+    fn has_class(attrs: &HashMap<String, String>, class: &str) -> bool {
+        if let Some(ref class_string) = attrs.get("class") {
+            return class_string.split(" ").any(|str| str == class);
+        } else {
+            return false;
+        }
+    }
+    fn has_attr(attrs: &HashMap<String, String>, name: &str, value: &str) -> bool {
+        if let Some(&attr_value) = attrs.get(name) {
+            let () = attr_value;
+            return attr_value == value;
+        } else {
+            return false;
+        }
+    }
+    fn test(&self, node: Rc<Node>) -> bool {
+        if let NodeEnum::Element(ref tag, ref attrs) = node.content {
+            match self {
+                &CondItem::Tag(name) => name == tag,
+                &CondItem::Class(class) => Self::has_class(attrs, class),
+                &CondItem::Id(id) => Self::has_attr(attrs, "id", id),
+                &CondItem::Attr { name, value } => Self::has_attr(attrs, name, value),
+                _ => false,
+            }
+        } else {
+            false
+        }
+        // tag: &str, attrs: &HashMap<&str, &str>
+
+    }
 }
+
+#[derive(Debug)]
+struct Cond<'a> {
+    vec: Vec<CondItem<'a>>,
+}
+
+impl<'a> Cond<'a> {
+    fn new(str: &'a str) -> Cond<'a> {
+        let re = Regex::new(r"([.#]?[^.#\[\]]+)|(\[\w+\])").unwrap();
+        let vec = re.find_iter(str)
+            .map(|(start, end)| CondItem::new(&str[start..end]))
+            .collect::<Vec<CondItem>>();
+        Cond { vec: vec }
+    }
+    fn test(&self, node: Rc<Node>) -> bool {
+        self.vec.iter().all(|ref item| item.test(node))
+    }
+}
+
+#[derive(Debug)]
+struct Selector<'a> {
+    vec: Vec<Cond<'a>>,
+}
+
+impl<'a> Selector<'a> {
+    fn new(str: &'a str) -> Selector<'a> {
+        let re = Regex::new(r"[.#\[\]\w]+").unwrap();
+        let vec = re.find_iter(str)
+            .map(|(start, end)| Cond::new(&str[start..end]))
+            .collect();
+        Selector { vec: vec }
+        // let mut res_vec = Vec::new();
+        // let rc = dom.document.deref().clone();
+        // walk(rc, &cond_vec, &mut res_vec);
+        // for node in res_vec {
+        //     node.borrow().debug();
+        // }
+        // println!("{:?}", res_vec);
+    }
+    fn traverse(&self, root: Rc<Node>) {}
+}
+
+fn load<R: Read>(input: &mut R) {
+    let dom = parse_document(RcDom::default(), Default::default())
+        .from_utf8()
+        .read_from(input)
+        .unwrap();
+    let root = parse(dom.document);
+}
+
+fn create_context(root: Rc<Node>) {}
 
 fn main() {
     // let stdin = io::stdin();
-    // let dom = parse_document(RcDom::default(), Default::default())
-    //     .from_utf8()
-    //     .read_from(&mut stdin.lock())
-    //     .unwrap();
-    // walk(0, dom.document);
-
+    let mut input = HTML.as_bytes();
+    let dom = parse_document(RcDom::default(), Default::default())
+        .from_utf8()
+        .read_from(&mut input)
+        .unwrap();
+    let root = parse(dom.document);
+    println!("{:?}", root);
     // if !dom.errors.is_empty() {
     //     println!("\nParse errors:");
     //     for err in dom.errors.into_iter() {
