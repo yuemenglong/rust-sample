@@ -18,64 +18,86 @@ use std::string::String;
 
 use tendril::TendrilSink;
 use html5ever::parse_document;
-use html5ever::rcdom::{Document, Doctype, Text as SysText, Comment, Element as SysElement, RcDom,
-                       Handle};
+use html5ever::Attribute;
+use html5ever::rcdom::{RcDom, Handle};
+use html5ever::rcdom::{Document as SysDocument, Doctype as SysDoctype, Text as SysText,
+                       Comment as SysComment, Element as SysElement};
 use std::rc::Weak;
 use std::rc::Rc;
 use std::cell::Cell;
 use std::cell::RefCell;
+use std::collections::HashMap;
+use std::borrow::BorrowMut;
 // This is not proper HTML serialization, of course.
 
 #[derive(Debug)]
 struct Node {
     parent: RefCell<Option<Weak<Node>>>,
-    node: String,
-    children: Vec<Rc<Node>>,
+    content: NodeEnum,
+    children: RefCell<Vec<Rc<Node>>>,
 }
 
 impl Node {
-    fn new(node: &str) -> Node {
+    fn new(content: NodeEnum) -> Node {
         Node {
             parent: RefCell::new(None),
-            node: node.to_string(),
-            children: Vec::new(),
+            content: content,
+            children: RefCell::new(Vec::new()),
         }
     }
 }
 
-fn walk(indent: usize, handle: Handle) {
+#[derive(Debug)]
+enum NodeEnum {
+    Document,
+    Doctype(String, String, String),
+    Text(String),
+    Comment(String),
+    Element(String, HashMap<String, String>),
+}
+
+fn walk(indent: usize, handle: Handle) -> Rc<Node> {
     let handle = handle.borrow();
     // FIXME: don't allocate
     print!("{}", repeat(" ").take(indent).collect::<String>());
-    let mut node = "".to_string();
-
-    match handle.node {
-        Document => {
+    let mut content = match handle.node {
+        SysDocument => {
             println!("#Document");
+            NodeEnum::Document
         }
-        Doctype(ref name, ref public, ref system) => {
+        SysDoctype(ref name, ref public, ref system) => {
             println!("<!DOCTYPE {} \"{}\" \"{}\">", *name, *public, *system);
+            NodeEnum::Doctype(name.to_string(), public.to_string(), system.to_string())
         }
         SysText(ref text) => {
             println!("#text: {}", escape_default(text));
+            NodeEnum::Text(text.to_string())
         }
-        Comment(ref text) => {
-            node = escape_default(text).to_string();
+        SysComment(ref text) => {
             println!("<!-- {} -->", escape_default(text));
+            NodeEnum::Comment(text.to_string())
         }
         SysElement(ref name, _, ref attrs) => {
-            node = name.local.to_string();
             print!("<{}", name.local);
+            let mut map = HashMap::<String, String>::new();
+            for attr in attrs {
+                let &Attribute { ref name, ref value } = attr;
+                map.insert(name.local.to_string(), value.to_string());
+            }
             for attr in attrs.iter() {
                 print!(" {}=\"{}\"", attr.name.local, attr.value);
             }
             println!(">");
+            NodeEnum::Element(name.local.to_string(), map)
         }
-    }
-
+    };
+    let rc = Rc::new(Node::new(content));
     for child in handle.children.iter() {
-        walk(indent + 4, child.clone());
+        let childNode = walk(indent + 4, child.clone());
+        *childNode.parent.borrow_mut() = Some(Rc::downgrade(&rc));
+        rc.children.borrow_mut().push(childNode);
     }
+    rc
 }
 
 // FIXME: Copy of str::escape_default from std, which is currently unstable
@@ -83,14 +105,11 @@ pub fn escape_default(s: &str) -> String {
     s.chars().flat_map(|c| c.escape_default()).collect()
 }
 
-
+struct Person {
+    age: i32,
+}
 
 fn main() {
-    let mut rc = Rc::new(Node {
-        parent: RefCell::new(None),
-        node: "asfd".to_string(),
-        children: Vec::new(),
-    });
     // let stdin = io::stdin();
     // let dom = parse_document(RcDom::default(), Default::default())
     //     .from_utf8()
