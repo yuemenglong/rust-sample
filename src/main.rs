@@ -30,6 +30,8 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::borrow::BorrowMut;
 use std::io::Read;
+use std::ops::Deref;
+use std::fmt;
 use regex::Regex;
 // This is not proper HTML serialization, of course.
 
@@ -46,6 +48,28 @@ impl Node {
             parent: RefCell::new(None),
             content: content,
             children: RefCell::new(Vec::new()),
+        }
+    }
+}
+
+impl fmt::Display for Node {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // 严格将第一个元素写入到给定的输出流 `f`。返回 `fmt:Result`，此结果表明操作成功
+        // 或失败。注意这里的 `write!` 用法和 `println!` 很相似。
+        match self.content {
+            NodeEnum::Document => write!(f, "Document"),
+            NodeEnum::Doctype(ref name, ref public, ref system) => {
+                write!(f, "<!DOCTYPE {} \"{}\" \"{}\">", name, public, system)
+            }
+            NodeEnum::Text(ref text) => write!(f, "{}", text),
+            NodeEnum::Comment(ref comment) => write!(f, "<!-- {} -->", comment),
+            NodeEnum::Element(ref tag, ref map) => {
+                write!(f, "<{}", tag);
+                for (name, value) in map {
+                    write!(f, " {}='{}'", name, value);
+                }
+                write!(f, " />")
+            }
         }
     }
 }
@@ -68,32 +92,23 @@ fn parse(handle: Handle) -> Rc<Node> {
     // FIXME: don't allocate
     let mut content = match handle.node {
         SysDocument => {
-            println!("#Document");
             NodeEnum::Document
         }
         SysDoctype(ref name, ref public, ref system) => {
-            println!("<!DOCTYPE {} \"{}\" \"{}\">", *name, *public, *system);
             NodeEnum::Doctype(name.to_string(), public.to_string(), system.to_string())
         }
         SysText(ref text) => {
-            println!("#text: {}", escape_default(text));
             NodeEnum::Text(text.to_string())
         }
         SysComment(ref text) => {
-            println!("<!-- {} -->", escape_default(text));
             NodeEnum::Comment(text.to_string())
         }
         SysElement(ref name, _, ref attrs) => {
-            print!("<{}", name.local);
             let mut map = HashMap::<String, String>::new();
             for attr in attrs {
                 let &Attribute { ref name, ref value } = attr;
                 map.insert(name.local.to_string(), value.to_string());
             }
-            for attr in attrs.iter() {
-                print!(" {}=\"{}\"", attr.name.local, attr.value);
-            }
-            println!(">");
             NodeEnum::Element(name.local.to_string(), map)
         }
     };
@@ -144,8 +159,7 @@ impl<'a> CondItem<'a> {
         }
     }
     fn has_attr(attrs: &HashMap<String, String>, name: &str, value: &str) -> bool {
-        if let Some(&attr_value) = attrs.get(name) {
-            let () = attr_value;
+        if let Some(attr_value) = attrs.get(name) {
             return attr_value == value;
         } else {
             return false;
@@ -182,7 +196,7 @@ impl<'a> Cond<'a> {
         Cond { vec: vec }
     }
     fn test(&self, node: Rc<Node>) -> bool {
-        self.vec.iter().all(|ref item| item.test(node))
+        self.vec.iter().all(move |ref item| item.test(node.clone()))
     }
 }
 
@@ -198,36 +212,68 @@ impl<'a> Selector<'a> {
             .map(|(start, end)| Cond::new(&str[start..end]))
             .collect();
         Selector { vec: vec }
-        // let mut res_vec = Vec::new();
-        // let rc = dom.document.deref().clone();
-        // walk(rc, &cond_vec, &mut res_vec);
-        // for node in res_vec {
-        //     node.borrow().debug();
-        // }
-        // println!("{:?}", res_vec);
+
     }
-    fn traverse(&self, root: Rc<Node>) {}
+    fn select(&self, root: Rc<Node>) -> Vec<Rc<Node>> {
+        fn walk(node: Rc<Node>, cond_vec: &Vec<Cond>, res_vec: &mut Vec<Rc<Node>>) {
+            if reverse_test(node.clone(), cond_vec, cond_vec.len() - 1) {
+                res_vec.push(node.clone());
+            }
+            for child in node.children.borrow().iter() {
+                walk(child.clone(), cond_vec, res_vec);
+            }
+        }
+        fn reverse_test(node: Rc<Node>, cond_vec: &Vec<Cond>, cond_pos: usize) -> bool {
+            // 比较当前节点和当前条件的关系
+            let cond = &cond_vec[cond_pos];
+            let ret = cond.test(node.clone());
+            match (ret, cond_pos, node.parent.borrow().deref()) {
+                // 当前成功且已经完成所有cond，返回成功
+                (true, 0, _) => true,
+                // 当前成功，但还有cond需要测试，却已经到达顶层
+                (true, _, &None) => false,
+                // 当前成功，还有cond需要测试，未到达顶层，继续向上层测试
+                (true, _, &Some(ref parent)) => {
+                    reverse_test(parent.upgrade().unwrap(), cond_vec, cond_pos - 1)
+                }
+                (_, _, _) => false,
+            }
+        }
+        let mut res_vec = Vec::new();
+        walk(root, &self.vec, &mut res_vec);
+        res_vec
+    }
 }
 
-fn load<R: Read>(input: &mut R) {
+fn load<R: Read>(input: &mut R) -> Box<Fn(&str) -> Vec<Rc<Node>>> {
     let dom = parse_document(RcDom::default(), Default::default())
         .from_utf8()
         .read_from(input)
         .unwrap();
     let root = parse(dom.document);
+    create_context(root)
 }
 
-fn create_context(root: Rc<Node>) {}
+fn create_context(root: Rc<Node>) -> Box<Fn(&str) -> Vec<Rc<Node>>> {
+    Box::new(move |selector| {
+        let selector = Selector::new(selector);
+        selector.select(root.clone())
+    })
+}
 
 fn main() {
     // let stdin = io::stdin();
     let mut input = HTML.as_bytes();
-    let dom = parse_document(RcDom::default(), Default::default())
-        .from_utf8()
-        .read_from(&mut input)
-        .unwrap();
-    let root = parse(dom.document);
-    println!("{:?}", root);
+    let S = load(&mut input);
+    for node in S("div") {
+        println!("{}", node);
+    }
+    // let dom = parse_document(RcDom::default(), Default::default())
+    //     .from_utf8()
+    //     .read_from(&mut input)
+    //     .unwrap();
+    // let root = parse(dom.document);
+    // println!("{:?}", root);
     // if !dom.errors.is_empty() {
     //     println!("\nParse errors:");
     //     for err in dom.errors.into_iter() {
