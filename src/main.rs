@@ -91,18 +91,12 @@ fn parse(handle: Handle) -> Rc<Node> {
     let handle = handle.borrow();
     // FIXME: don't allocate
     let mut content = match handle.node {
-        SysDocument => {
-            NodeEnum::Document
-        }
+        SysDocument => NodeEnum::Document,
         SysDoctype(ref name, ref public, ref system) => {
             NodeEnum::Doctype(name.to_string(), public.to_string(), system.to_string())
         }
-        SysText(ref text) => {
-            NodeEnum::Text(text.to_string())
-        }
-        SysComment(ref text) => {
-            NodeEnum::Comment(text.to_string())
-        }
+        SysText(ref text) => NodeEnum::Text(text.to_string()),
+        SysComment(ref text) => NodeEnum::Comment(text.to_string()),
         SysElement(ref name, _, ref attrs) => {
             let mut map = HashMap::<String, String>::new();
             for attr in attrs {
@@ -215,37 +209,179 @@ impl<'a> Selector<'a> {
 
     }
     fn select(&self, root: Rc<Node>) -> Vec<Rc<Node>> {
-        fn walk(node: Rc<Node>, cond_vec: &Vec<Cond>, res_vec: &mut Vec<Rc<Node>>) {
-            if reverse_test(node.clone(), cond_vec, cond_vec.len() - 1) {
+        fn walk(root: Rc<Node>,
+                node: Rc<Node>,
+                cond_vec: &Vec<Cond>,
+                res_vec: &mut Vec<Rc<Node>>) {
+            if reverse_test(root.clone(), node.clone(), cond_vec, cond_vec.len() - 1) {
                 res_vec.push(node.clone());
             }
             for child in node.children.borrow().iter() {
-                walk(child.clone(), cond_vec, res_vec);
+                walk(root.clone(), child.clone(), cond_vec, res_vec);
             }
         }
-        fn reverse_test(node: Rc<Node>, cond_vec: &Vec<Cond>, cond_pos: usize) -> bool {
-            // 比较当前节点和当前条件的关系
+        fn reverse_test(root: Rc<Node>,
+                        node: Rc<Node>,
+                        cond_vec: &Vec<Cond>,
+                        cond_pos: usize)
+                        -> bool {
+            // Compare Current Nod And Current Cond
             let cond = &cond_vec[cond_pos];
-            let ret = cond.test(node.clone());
-            match (ret, cond_pos, node.parent.borrow().deref()) {
-                // 当前成功且已经完成所有cond，返回成功
-                (true, 0, _) => true,
-                // 当前成功，但还有cond需要测试，却已经到达顶层
-                (true, _, &None) => false,
-                // 当前成功，还有cond需要测试，未到达顶层，继续向上层测试
-                (true, _, &Some(ref parent)) => {
-                    reverse_test(parent.upgrade().unwrap(), cond_vec, cond_pos - 1)
+            let current_test = cond.test(node.clone());
+            let parent = node.parent.borrow();
+            let is_back_cond = cond_pos == cond_vec.len() - 1;
+            let is_front_cond = cond_pos == 0;
+            let is_root = node.deref() as *const _ == root.deref() as *const _;
+            match (current_test, is_back_cond, is_front_cond, is_root) {
+                // Current Is Fail And Not Match Back Cond, Fail
+                (false, true, _, _) => false,
+                // Current Is Fail But Has Match Back Cond, But Reach Root, Fail
+                (false, false, _, true) => false,
+                // Current Is Fail But Has Match Back Cond, And Not Reach Root, Recursive For Current Cond
+                (false, false, _, false) => {
+                    let parent = parent.as_ref().unwrap().upgrade().unwrap();
+                    reverse_test(root, parent, cond_vec, cond_pos)
                 }
-                (_, _, _) => false,
+                // Current Is Succ And Finish All Conds, Succ
+                (true, _, true, _) => true,
+                // Current Is Succ And Not Finish All Conds, But Reach Root, Fail
+                (true, _, false, true) => false, 
+                // Current Is Succ And Not Finish All Conds, And Not Reach Root, Recursive For Next Cond
+                (true, _, false, false) => {
+                    let parent = parent.as_ref().unwrap().upgrade().unwrap();
+                    reverse_test(root, parent, cond_vec, cond_pos - 1)
+                }
             }
         }
         let mut res_vec = Vec::new();
-        walk(root, &self.vec, &mut res_vec);
+        // let () = root.parent.borrow_mut().deref();
+        walk(root.clone(), root.clone(), &self.vec, &mut res_vec);
         res_vec
     }
 }
 
-fn load<R: Read>(input: &mut R) -> Box<Fn(&str) -> Vec<Rc<Node>>> {
+struct SelectResult {
+    res: Vec<Rc<Node>>,
+}
+
+impl SelectResult {
+    fn new(res: Vec<Rc<Node>>) -> SelectResult {
+        SelectResult { res: res }
+    }
+    fn from_node(node: Rc<Node>) -> SelectResult {
+        SelectResult { res: vec![node] }
+    }
+    fn check(&self) {
+        if self.res.len() > 1 {
+            panic!("{}", "There Are More Than One Children");
+        }
+    }
+    fn children(&self, selector: &str) {
+        let selector = Selector::new(selector);
+
+    }
+    fn get(&self, idx: usize) -> SelectResult {
+        SelectResult { res: vec![self.res[idx].clone()] }
+    }
+    fn attr(&self, name: &str) -> Option<&String> {
+        self.check();
+        if self.res.len() == 0 {
+            return None;
+        }
+        match self.res[0].content {
+            NodeEnum::Element(ref tag, ref attrs) => attrs.get(name),
+            _ => None,
+        }
+    }
+    fn name(&self) -> Option<&String> {
+        self.check();
+        if self.res.len() == 0 {
+            return None;
+        }
+        match self.res[0].content {
+            NodeEnum::Element(ref tag, ref attrs) => Some(tag),
+            _ => None,
+        }
+    }
+    fn text(&self) -> Option<String> {
+        fn recursive_text(node: Rc<Node>, res: &mut String) {
+            match node.content {
+                NodeEnum::Text(ref text) => res.push_str(text),
+                _ => {}
+            }
+            for child in node.children.borrow().iter() {
+                recursive_text(child.clone(), res);
+            }
+        }
+        self.check();
+        if self.res.len() == 0 {
+            return None;
+        }
+        let mut res = String::new();
+        recursive_text(self.res[0].clone(), &mut res);
+        Some(res)
+    }
+    fn inner_html(&self) -> Option<String> {
+        self.check();
+        if self.res.len() == 0 {
+            return None;
+        }
+        fn recursive_inner(node: Rc<Node>, res: &mut String) {
+            match node.content {
+                NodeEnum::Element(ref tag, ref attrs) => {
+                    res.push_str(format!("<{}", tag).as_ref());
+                    for (name, value) in attrs {
+                        res.push_str(format!(" {}='{}'", name, value).as_ref());
+                    }
+                    res.push_str(">");
+                    for child in node.children.borrow().iter() {
+                        recursive_inner(child.clone(), res);
+                    }
+                    res.push_str(format!("</{}>", tag).as_ref());
+                }
+                NodeEnum::Text(ref text) => {
+                    res.push_str(text);
+                }
+                _ => {}
+            }
+        }
+        let mut res = String::new();
+        recursive_inner(self.res[0].clone(), &mut res);
+        Some(res)
+    }
+    fn outer_html(&self) -> Option<String> {
+        self.check();
+        if self.res.len() == 0 {
+            return None;
+        }
+        self.inner_html()
+    }
+}
+
+
+impl fmt::Display for SelectResult {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.inner_html() {
+            Some(ref html) => write!(f, "{}", html),
+            None => write!(f, ""),
+        }
+    }
+}
+
+impl IntoIterator for SelectResult {
+    type Item = SelectResult;
+    type IntoIter = ::std::vec::IntoIter<SelectResult>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.res
+            .iter()
+            .map(|node| SelectResult::from_node(node.clone()))
+            .collect::<Vec<SelectResult>>()
+            .into_iter()
+    }
+}
+
+fn load<R: Read>(input: &mut R) -> Box<Fn(&str) -> SelectResult> {
     let dom = parse_document(RcDom::default(), Default::default())
         .from_utf8()
         .read_from(input)
@@ -254,10 +390,10 @@ fn load<R: Read>(input: &mut R) -> Box<Fn(&str) -> Vec<Rc<Node>>> {
     create_context(root)
 }
 
-fn create_context(root: Rc<Node>) -> Box<Fn(&str) -> Vec<Rc<Node>>> {
+fn create_context(root: Rc<Node>) -> Box<Fn(&str) -> SelectResult> {
     Box::new(move |selector| {
         let selector = Selector::new(selector);
-        selector.select(root.clone())
+        SelectResult::new(selector.select(root.clone()))
     })
 }
 
