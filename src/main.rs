@@ -1,8 +1,10 @@
 extern crate html5ever;
 extern crate tendril;
+extern crate hyper;
 extern crate regex;
 
-mod rquery;
+pub mod rquery;
+pub mod http;
 
 static HTML: &'static str = "
 <html>

@@ -1,5 +1,3 @@
-extern crate hyper;
-
 use std::collections::HashMap;
 use std::io::{Read, Write};
 
