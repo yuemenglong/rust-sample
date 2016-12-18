@@ -100,8 +100,7 @@ enum CondItem<'a> {
     Tag(&'a str),
     Class(&'a str),
     Id(&'a str),
-    Attr { name: &'a str, value: &'a str },
-    // HasAttr(&'a str),
+    Attr { name: &'a str, value: &'a str }, // HasAttr(&'a str),
 }
 
 impl<'a> CondItem<'a> {
@@ -242,10 +241,10 @@ impl SelectResult {
             panic!("{}", "There Are More Than One Children");
         }
     }
-    pub fn children(&self, selector: &str)->SelectResult {
+    pub fn children(&self, selector: &str) -> SelectResult {
         let mut res = Vec::new();
         let selector = Selector::new(selector);
-        for node in self.res.iter(){
+        for node in self.res.iter() {
             let vec = selector.select(node.clone());
             res.extend(vec);
         }
@@ -360,4 +359,3 @@ fn create_context(root: Rc<Node>) -> Box<Fn(&str) -> SelectResult> {
         SelectResult::new(selector.select(root.clone()))
     })
 }
-

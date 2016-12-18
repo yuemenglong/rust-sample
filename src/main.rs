@@ -1,40 +1,31 @@
+
 extern crate html5ever;
 extern crate tendril;
 extern crate hyper;
 extern crate regex;
 
-pub mod rquery;
 pub mod http;
+pub mod rquery;
 
-static HTML: &'static str = "
-<html>
-<head>
-</head>
-<body>
-<div id='container'>
-    <div class='cch'></div>
-</div>
-</body>
-</html>
-";
+use http::Client;
+
+struct Test<'a> {
+    a: &'a str,
+    b: &'a str,
+}
+
+impl<'a> Test<'a> {
+    fn get_a(&self) -> &str {
+        self.a
+    }
+    fn set_b(&'a mut self, b: &'a str) {
+        self.b = b;
+    }
+}
 
 fn main() {
-    // let stdin = io::stdin();
-    let mut input = HTML.as_bytes();
-    let s = rquery::load(&mut input);
-    for node in s("div") {
-        println!("{}", node);
-    }
-    // let dom = parse_document(RcDom::default(), Default::default())
-    //     .from_utf8()
-    //     .read_from(&mut input)
-    //     .unwrap();
-    // let root = parse(dom.document);
-    // println!("{:?}", root);
-    // if !dom.errors.is_empty() {
-    //     println!("\nParse errors:");
-    //     for err in dom.errors.into_iter() {
-    //         println!("    {}", err);
-    //     }
-    // }
+    let mut client = Client::new();
+    let mut res = client.get("http://www.baidu.com").unwrap();
+    println!("{:?}", res.get_body());
+    println!("{:?}", res.get_body());
 }
