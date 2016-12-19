@@ -27,7 +27,8 @@ impl HttpResult {
         HttpResult { res: res }
     }
     pub fn get_header(&self, name: &str) -> Option<Vec<String>> {
-        self.res.headers
+        self.res
+            .headers
             .get_raw(name)
             .map(|arr| {
                 arr.iter()
@@ -49,10 +50,12 @@ impl HttpResult {
             Err(_) => Err("Error"),
         }
     }
-    pub fn get_read(&self) -> &Response {
-        &self.res
+    pub fn get_read(self) -> Response {
+        self.res
     }
 }
+
+
 
 impl Client {
     pub fn new() -> Client {
