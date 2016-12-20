@@ -6,17 +6,13 @@ use rquery::cond::Cond;
 use rquery::node::Node;
 
 #[derive(Debug)]
-pub struct Selector<'a> {
-    vec: Vec<Cond<'a>>,
+pub struct Selector {
+    vec: Vec<Cond>,
 }
 
-impl<'a> Selector<'a> {
-    pub fn new(str: &'a str) -> Selector<'a> {
-        let re = Regex::new(r"[.#\[\]\w]+").unwrap();
-        let vec = re.find_iter(str)
-            .map(|(start, end)| Cond::new(&str[start..end]))
-            .collect();
-        Selector { vec: vec }
+impl Selector {
+    pub fn new(str: &str) -> Selector {
+        Selector { vec: Cond::parse(str) }
     }
     pub fn select(&self, root: Rc<Node>) -> Vec<Rc<Node>> {
         fn walk(root: Rc<Node>,

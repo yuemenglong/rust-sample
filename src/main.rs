@@ -8,6 +8,7 @@ pub mod rquery;
 // use http::Client;
 use std::fs::File;
 // use std::io::Write;
+use std::str::Chars;
 
 fn main() {
     // let mut client = Client::new();
@@ -16,6 +17,9 @@ fn main() {
     // println!("{:?}", res.get_body());
     // let s = rquery::load(&mut res.get_read());
     let s= rquery::load(&mut File::open("index.html").unwrap());
-    let node = s("[id=ig]");
+    let node = s("[id=wrapper]");
     println!("{:?}", node);
+
 }
+
+
