@@ -17,7 +17,6 @@ use std::fmt;
 use regex::Regex;
 // This is not proper HTML serialization, of course.
 
-#[derive(Debug)]
 struct Node {
     parent: RefCell<Option<Weak<Node>>>,
     content: NodeEnum,
@@ -34,14 +33,14 @@ impl Node {
     }
 }
 
-impl fmt::Display for Node {
+impl fmt::Debug for Node {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.content {
-            NodeEnum::Document => write!(f, "Document"),
+            NodeEnum::Document => write!(f, "$Document"),
             NodeEnum::Doctype(ref name, ref public, ref system) => {
                 write!(f, "<!DOCTYPE {} \"{}\" \"{}\">", name, public, system)
             }
-            NodeEnum::Text(ref text) => write!(f, "{}", text),
+            NodeEnum::Text(ref text) => write!(f, "$Text: {}", text),
             NodeEnum::Comment(ref comment) => write!(f, "<!-- {} -->", comment),
             NodeEnum::Element(ref tag, ref map) => {
                 let _ = write!(f, "<{}", tag);
@@ -51,6 +50,19 @@ impl fmt::Display for Node {
                 write!(f, " />")
             }
         }
+    }
+}
+
+impl fmt::Debug for SelectResult {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut ret = Ok(());
+        for (i, node) in self.res.iter().enumerate() {
+            if i > 0 {
+                let _ = write!(f, "\n");
+                ret = node.fmt(f);
+            }
+        }
+        ret
     }
 }
 
@@ -64,12 +76,7 @@ enum NodeEnum {
 }
 
 fn parse(handle: Handle) -> Rc<Node> {
-    // fn escape_default(s: &str) -> String {
-    //     s.chars().flat_map(|c| c.escape_default()).collect()
-    // }
-
     let handle = handle.borrow();
-    // FIXME: don't allocate
     let content = match handle.node {
         SysDocument => NodeEnum::Document,
         SysDoctype(ref name, ref public, ref system) => {
@@ -86,13 +93,13 @@ fn parse(handle: Handle) -> Rc<Node> {
             NodeEnum::Element(name.local.to_string(), map)
         }
     };
-    let rc = Rc::new(Node::new(content));
+    let node = Rc::new(Node::new(content));
     for child in handle.children.iter() {
         let child_node = parse(child.clone());
-        *child_node.parent.borrow_mut() = Some(Rc::downgrade(&rc));
-        rc.children.borrow_mut().push(child_node);
+        *child_node.parent.borrow_mut() = Some(Rc::downgrade(&node));
+        node.children.borrow_mut().push(child_node);
     }
-    rc
+    node
 }
 
 #[derive(Debug)]
@@ -138,7 +145,6 @@ impl<'a> CondItem<'a> {
             false
         }
         // tag: &str, attrs: &HashMap<&str, &str>
-
     }
 }
 
@@ -219,7 +225,6 @@ impl<'a> Selector<'a> {
             }
         }
         let mut res_vec = Vec::new();
-        // let () = root.parent.borrow_mut().deref();
         walk(root.clone(), root.clone(), &self.vec, &mut res_vec);
         res_vec
     }

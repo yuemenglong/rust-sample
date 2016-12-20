@@ -27,14 +27,13 @@ impl HttpResult {
         HttpResult { res: res }
     }
     pub fn get_header(&self, name: &str) -> Option<Vec<String>> {
-        self.res
-            .headers
-            .get_raw(name)
-            .map(|arr| {
-                arr.iter()
-                    .map(|vec| std::str::from_utf8(vec).unwrap().to_string())
-                    .collect::<Vec<_>>()
-            })
+        fn utf8_to_string(vec: &Vec<u8>) -> String {
+            std::str::from_utf8(vec).unwrap().to_string()
+        }
+        fn utf8_arr_to_string_vec(arr: &[Vec<u8>]) -> Vec<String> {
+            arr.iter().map(utf8_to_string).collect()
+        }
+        self.res.headers.get_raw(name).map(utf8_arr_to_string_vec)
     }
     pub fn get_body(&mut self) -> Result<String, Error> {
         let mut ret = String::new();
