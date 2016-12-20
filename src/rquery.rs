@@ -57,9 +57,9 @@ impl fmt::Debug for SelectResult {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut ret = Ok(());
         for (i, node) in self.res.iter().enumerate() {
-            if i > 0 {
-                let _ = write!(f, "\n");
-                ret = node.fmt(f);
+            ret = match i {
+                0 => write!(f, "\n{}", Self::node_html(node.clone())),
+                _ => write!(f, "{}", Self::node_html(node.clone())),
             }
         }
         ret
@@ -241,6 +241,44 @@ impl SelectResult {
     fn from_node(node: Rc<Node>) -> SelectResult {
         SelectResult { res: vec![node] }
     }
+    fn node_html(node: Rc<Node>) -> String {
+        fn recursive_html(node: Rc<Node>, res: &mut String) {
+            match node.content {
+                NodeEnum::Element(ref tag, ref attrs) => {
+                    res.push_str(format!("<{}", tag).as_ref());
+                    for (name, value) in attrs {
+                        res.push_str(format!(" {}='{}'", name, value).as_ref());
+                    }
+                    res.push_str(">");
+                    for child in node.children.borrow().iter() {
+                        recursive_html(child.clone(), res);
+                    }
+                    res.push_str(format!("</{}>", tag).as_ref());
+                }
+                NodeEnum::Text(ref text) => {
+                    res.push_str(text);
+                }
+                _ => {}
+            }
+        }
+        let mut res = String::new();
+        recursive_html(node, &mut res);
+        res
+    }
+    fn node_text(node: Rc<Node>) -> String {
+        fn recursive_text(node: Rc<Node>, res: &mut String) {
+            match node.content {
+                NodeEnum::Text(ref text) => res.push_str(text),
+                _ => {}
+            }
+            for child in node.children.borrow().iter() {
+                recursive_text(child.clone(), res);
+            }
+        }
+        let mut res = String::new();
+        recursive_text(node, &mut res);
+        res
+    }
     fn check(&self) {
         if self.res.len() > 1 {
             panic!("{}", "There Are More Than One Children");
@@ -251,7 +289,9 @@ impl SelectResult {
         let selector = Selector::new(selector);
         for node in self.res.iter() {
             let vec = selector.select(node.clone());
-            res.extend(vec);
+            if vec.len() > 0 {
+                res.extend(vec);
+            }
         }
         SelectResult::new(res)
     }
@@ -279,60 +319,18 @@ impl SelectResult {
         }
     }
     pub fn text(&self) -> Option<String> {
-        fn recursive_text(node: Rc<Node>, res: &mut String) {
-            match node.content {
-                NodeEnum::Text(ref text) => res.push_str(text),
-                _ => {}
-            }
-            for child in node.children.borrow().iter() {
-                recursive_text(child.clone(), res);
-            }
-        }
         self.check();
         if self.res.len() == 0 {
             return None;
         }
-        let mut res = String::new();
-        recursive_text(self.res[0].clone(), &mut res);
-        Some(res)
+        Some(Self::node_text(self.res[0].clone()))
     }
     pub fn html(&self) -> Option<String> {
         self.check();
         if self.res.len() == 0 {
             return None;
         }
-        fn recursive_inner(node: Rc<Node>, res: &mut String) {
-            match node.content {
-                NodeEnum::Element(ref tag, ref attrs) => {
-                    res.push_str(format!("<{}", tag).as_ref());
-                    for (name, value) in attrs {
-                        res.push_str(format!(" {}='{}'", name, value).as_ref());
-                    }
-                    res.push_str(">");
-                    for child in node.children.borrow().iter() {
-                        recursive_inner(child.clone(), res);
-                    }
-                    res.push_str(format!("</{}>", tag).as_ref());
-                }
-                NodeEnum::Text(ref text) => {
-                    res.push_str(text);
-                }
-                _ => {}
-            }
-        }
-        let mut res = String::new();
-        recursive_inner(self.res[0].clone(), &mut res);
-        Some(res)
-    }
-}
-
-
-impl fmt::Display for SelectResult {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.html() {
-            Some(ref html) => write!(f, "{}", html),
-            None => write!(f, ""),
-        }
+        Some(Self::node_html(self.res[0].clone()))
     }
 }
 
@@ -361,6 +359,7 @@ pub fn load<R: Read>(input: &mut R) -> Box<Fn(&str) -> SelectResult> {
 fn create_context(root: Rc<Node>) -> Box<Fn(&str) -> SelectResult> {
     Box::new(move |selector| {
         let selector = Selector::new(selector);
-        SelectResult::new(selector.select(root.clone()))
+        let vec = selector.select(root.clone());
+        SelectResult::new(vec)
     })
 }
