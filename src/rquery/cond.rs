@@ -14,11 +14,13 @@ enum CondItem {
     Id(String),
     Has(String),
     Attr(String, String),
+    NextLayer,
 }
 
 impl CondItem {
     fn new(str: &str) -> CondItem {
         match &str[0..1] {
+            ">" => CondItem::NextLayer,
             "." => CondItem::Class(str[1..].to_string()),
             "#" => CondItem::Id(str[1..].to_string()),
             "[" => {
@@ -61,6 +63,7 @@ impl CondItem {
                 &CondItem::Id(ref id) => Self::attr_eq(attrs, "id", id),
                 &CondItem::Attr(ref name, ref value) => Self::attr_eq(attrs, name, value),
                 &CondItem::Has(ref name) => Self::attr_exists(attrs, name),
+                &CondItem::NextLayer => false,
             }
         } else {
             false
@@ -84,8 +87,17 @@ impl Cond {
     pub fn test(&self, node: Rc<Node>) -> bool {
         self.vec.iter().all(move |ref item| item.test(node.clone()))
     }
+    pub fn is_next_layer(&self) -> bool {
+        if self.vec.len() != 1 {
+            return false;
+        }
+        match self.vec[0] {
+            CondItem::NextLayer => true,
+            _ => false,
+        }
+    }
     pub fn parse(str: &str) -> Vec<Cond> {
-        let re = Regex::new(r"((#|\.)[^#.\[ ]+)| |(\[.+\])").unwrap();
+        let re = Regex::new(r"((#|\.)?[^#.\[ >]+)|(\[.+\])| |>").unwrap();
         let mut vec = Vec::new();
         let mut cond = Cond::new();
         for (s, e) in re.find_iter(str) {
@@ -95,6 +107,20 @@ impl Cond {
                     continue;
                 }
                 (" ", _) => {
+                    vec.push(cond);
+                    cond = Cond::new();
+                    continue;
+                }
+                (">", 0) => {
+                    cond.push(item);
+                    vec.push(cond);
+                    cond = Cond::new();
+                    continue;
+                }
+                (">", _) => {
+                    vec.push(cond);
+                    cond = Cond::new();
+                    cond.push(item);
                     vec.push(cond);
                     cond = Cond::new();
                     continue;

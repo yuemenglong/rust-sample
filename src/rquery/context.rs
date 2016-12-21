@@ -31,6 +31,20 @@ impl SelectResult {
     fn from_node(node: Rc<Node>) -> SelectResult {
         SelectResult { res: vec![node] }
     }
+    fn node_element(node: Rc<Node>) -> String {
+        let mut res = String::new();
+        match node.content {
+            NodeEnum::Element(ref tag, ref attrs) => {
+                res.push_str(format!("<{}", tag).as_ref());
+                for (name, value) in attrs {
+                    res.push_str(format!(" {}='{}'", name, value).as_ref());
+                }
+                res.push_str("/>");
+            }
+            _ => {}
+        }
+        res
+    }
     fn node_html(node: Rc<Node>) -> String {
         fn recursive_html(node: Rc<Node>, res: &mut String) {
             match node.content {
@@ -98,7 +112,7 @@ impl SelectResult {
             _ => None,
         }
     }
-    pub fn name(&self) -> Option<&String> {
+    pub fn tag(&self) -> Option<&String> {
         self.check();
         if self.res.len() == 0 {
             return None;
@@ -121,6 +135,13 @@ impl SelectResult {
             return None;
         }
         Some(Self::node_html(self.res[0].clone()))
+    }
+    pub fn element(&self) -> Option<String> {
+        self.check();
+        if self.res.len() == 0 {
+            return None;
+        }
+        Some(Self::node_element(self.res[0].clone()))
     }
 }
 

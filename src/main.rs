@@ -16,10 +16,8 @@ fn main() {
     // File::create("index.html").unwrap().write(res.get_raw().unwrap().as_ref());
     // println!("{:?}", res.get_body());
     // let s = rquery::load(&mut res.get_read());
-    let s= rquery::load(&mut File::open("index.html").unwrap());
-    let node = s("[id=wrapper]");
-    println!("{:?}", node);
+    let s = rquery::load(&mut File::open("index.html").unwrap());
+    let node = s("body>#wrapper");
+    println!("{}", node.element().unwrap());
 
 }
-
-
