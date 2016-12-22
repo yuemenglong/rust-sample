@@ -6,6 +6,10 @@ authors = ["yml <yuemenglong@126.com>"]
 [dependencies]
 html5ever = "*"
 hyper = "0.9.13"
-tendril = "0.2.3"
 regex = "*"
-string_cache = "*"
+rustc-serialize = "0.3.21"
+
+[dependencies.mysql]
+version = "*"
+default-features = false
+features = ["pipe"]

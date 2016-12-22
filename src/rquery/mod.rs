@@ -1,6 +1,6 @@
 use std::default::Default;
 
-use tendril::TendrilSink;
+use html5ever::tendril::TendrilSink;
 use html5ever::parse_document;
 use html5ever::rcdom::RcDom;
 
