@@ -2,17 +2,18 @@
 use mysql;
 use orm::Entity;
 
-pub macro_rules! entity {
+#[macro_export]
+macro_rules! entity {
     (struct $ENTITY:ident{
         $($FIELD:ident:$TYPE:ty),*
     })=>{
-        #[derive(Debug)]
+        #[derive(Debug, Clone)]
         struct $ENTITY {
+            id: u64,
             $(pub $FIELD: $TYPE),*
         }
 
         impl $ENTITY {
-            // This is purely an example—not a good one.
             fn get_field_names() -> Vec<&'static str> {
                 vec![$(stringify!($FIELD)),*]
             }
@@ -24,6 +25,9 @@ pub macro_rules! entity {
         }
 
         impl Entity for $ENTITY{
+            fn set_id(&mut self, id: u64) {
+                self.id = id;
+            }
             fn get_insert_sql(&self)->String{
                 let mut kv = String::new();
                 $(kv.push_str(&format!(" {} = :{}", stringify!($FIELD), stringify!($FIELD)));),*
