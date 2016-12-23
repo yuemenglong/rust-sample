@@ -4,6 +4,7 @@ use mysql::error::Error;
 use mysql::QueryResult;
 use std::cell::RefCell;
 
+pub mod cond;
 pub mod macros;
 
 pub trait Entity {

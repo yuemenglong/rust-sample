@@ -2,9 +2,18 @@
 extern crate mysql;
 
 use mysql::value::from_row;
+use mysql::Value;
 
 #[macro_use]
 pub mod orm;
+
+use orm::cond::Cond;
+
+macro_rules! cond {
+    ($FIELD:ident=$E:expr) => {{
+        Cond::Eq(stringify!($FIELD).to_string(), Value::from($E))
+    }}
+}
 
 macro_rules! row_take {
     ($FIELD:ident, Option<$TYPE:ty>, $ROW:ident) => {{
@@ -48,13 +57,13 @@ macro_rules! entity {
                 $(vec.push(format!("{} = :{}", stringify!($FIELD), stringify!($FIELD)));)*
                 vec.join(", ")
             }
-            fn get_params(&self)->Vec<(String, mysql::Value)>{
+            fn get_params(&self)->Vec<(String, Value)>{
                 let mut vec = Vec::new();
-                $(vec.push((stringify!($FIELD).to_string(), mysql::Value::from(&self.$FIELD)));)*
+                $(vec.push((stringify!($FIELD).to_string(), Value::from(&self.$FIELD)));)*
                 vec
             }
-            fn get_params_id(&self)->Vec<(String, mysql::Value)>{
-                vec![("id".to_string(), mysql::Value::from(self.id))]
+            fn get_params_id(&self)->Vec<(String, Value)>{
+                vec![("id".to_string(), Value::from(self.id))]
             }
             fn from_row(mut row: mysql::conn::Row)->$ENTITY{
                 $ENTITY{
@@ -75,15 +84,18 @@ entity!(struct Person{
     name:String,
 });
 fn main() {
+    let cond = cond!{id=1};
+    println!("{:?}", cond.to_param());
     let pool = mysql::Pool::new("mysql://root:root@localhost:3306/test").unwrap();
     let mut stmt = pool.prepare("select id, age, name from person").unwrap();
     let res = stmt.execute(()).unwrap();
     // println!("{:?}", res.count());
-    res.map(|row|{
-        let mut row = row.unwrap();
-        let p = Person::from_row(row);
-        println!("{:?}", p);
-    }).collect::<Vec<_>>();
+    res.map(|row| {
+            let mut row = row.unwrap();
+            let p = Person::from_row(row);
+            println!("{:?}", p);
+        })
+        .collect::<Vec<_>>();
     // println!("{:?}", res);
     // orm::macros::test();
     let p = Person {
