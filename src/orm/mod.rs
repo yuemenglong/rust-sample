@@ -4,11 +4,16 @@ use mysql::error::Error;
 use mysql::QueryResult;
 use std::cell::RefCell;
 
+pub mod macros;
+
 pub trait Entity {
     // add code here
     fn set_id(&mut self, id: u64);
+
+    fn get_prepare_fields() -> String;
+    fn get_params(&self) -> Vec<(String, mysql::Value)>;
+
     fn get_insert_sql(&self) -> String;
-    fn get_insert_params(&self) -> Vec<(String, mysql::Value)>;
 }
 
 pub struct DB {
@@ -22,7 +27,7 @@ impl DB {
             return Err(stmt.unwrap_err());
         }
         let mut stmt = stmt.unwrap();
-        let res = stmt.execute(entity.get_insert_params());
+        let res = stmt.execute(entity.get_params());
         if res.is_err() {
             return Err(res.unwrap_err());
         }
