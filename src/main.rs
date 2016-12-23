@@ -4,10 +4,10 @@ extern crate mysql;
 use mysql::value::from_row;
 use mysql::Value;
 
-#[macro_use]
 pub mod orm;
 
 use orm::cond::Cond;
+use orm::Entity;
 
 macro_rules! cond {
     ($FIELD:ident=$E:expr) => {{
@@ -36,25 +36,25 @@ macro_rules! entity {
             $($FIELD:$TYPE,)*
         }
 
-        impl $ENTITY{
+        impl Entity for $ENTITY{
             fn get_table()->String{
                 stringify!($ENTITY).to_string()
             }
             fn set_id(&mut self, id:u64){
                 self.id = Some(id);
             }
+            fn get_id_cond(&self)->String{
+                format!("`id` = {}", self.id.unwrap())
+            }
             fn get_fields()->String{
                 let mut vec = Vec::new();
-                vec.push("id".to_string());
-                $(vec.push(stringify!($FIELD).to_string());)*
+                vec.push("`id`".to_string());
+                $(vec.push(format!("`{}`", stringify!($FIELD)));)*
                 vec.join(", ")
-            }
-            fn get_id_cond(&self)->String{
-                format!("id = {}", self.id.unwrap())
             }
             fn get_prepare()->String{
                 let mut vec = Vec::new();
-                $(vec.push(format!("{} = :{}", stringify!($FIELD), stringify!($FIELD)));)*
+                $(vec.push(format!("`{}` = :{}", stringify!($FIELD), stringify!($FIELD)));)*
                 vec.join(", ")
             }
             fn get_params(&self)->Vec<(String, Value)>{
@@ -81,27 +81,42 @@ struct B {
 }
 entity!(struct Person{
     age:i32,
-    name:String,
+    name:Option<String>,
 });
 fn main() {
-    let cond = cond!{id=1};
-    println!("{:?}", cond.to_param());
-    let pool = mysql::Pool::new("mysql://root:root@localhost:3306/test").unwrap();
-    let mut stmt = pool.prepare("select id, age, name from person").unwrap();
-    let res = stmt.execute(()).unwrap();
-    // println!("{:?}", res.count());
-    res.map(|row| {
-            let mut row = row.unwrap();
-            let p = Person::from_row(row);
-            println!("{:?}", p);
-        })
-        .collect::<Vec<_>>();
-    // println!("{:?}", res);
-    // orm::macros::test();
+    let db = orm::open("root", "root", "localhost", 3306, "test").unwrap();
     let p = Person {
         id: None,
-        age: 10,
-        name: "asdf".to_string(),
+        age: 20,
+        name: Some("bill".to_string()),
     };
-    println!("insert into {} set {}", Person::get_table(), Person::get_prepare());
+    let mut p = db.insert(&p).unwrap();
+    println!("{:?}", p);
+    p.age = 21;
+    let ret = db.update(&p);
+    println!("{:?}", ret);
+    let p: Person = db.get(p.id.unwrap()).unwrap().unwrap();
+    println!("{:?}", p);
+    let ret = db.delete(p);
+    println!("{:?}", ret);
+    // let cond = cond!{id=1};
+    // println!("{:?}", cond.to_param());
+    // let pool = mysql::Pool::new("mysql://root:root@localhost:3306/test").unwrap();
+    // let mut stmt = pool.prepare("select id, age, name from person").unwrap();
+    // let res = stmt.execute(()).unwrap();
+    // // println!("{:?}", res.count());
+    // res.map(|row| {
+    //         let mut row = row.unwrap();
+    //         let p = Person::from_row(row);
+    //         println!("{:?}", p);
+    //     })
+    //     .collect::<Vec<_>>();
+    // // println!("{:?}", res);
+    // // orm::macros::test();
+    // let p = Person {
+    //     id: None,
+    //     age: 10,
+    //     name: "asdf".to_string(),
+    // };
+    // println!("insert into {} set {}", Person::get_table(), Person::get_prepare());
 }

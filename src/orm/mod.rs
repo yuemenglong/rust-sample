@@ -1,4 +1,5 @@
 use mysql;
+use mysql::Value;
 use mysql::Pool;
 use mysql::error::Error;
 use mysql::QueryResult;
@@ -8,13 +9,14 @@ pub mod cond;
 pub mod macros;
 
 pub trait Entity {
-    // add code here
+    fn get_table() -> String;
+    fn get_fields() -> String;
+    fn get_prepare() -> String;
     fn set_id(&mut self, id: u64);
-
-    fn get_prepare_fields() -> String;
-    fn get_params(&self) -> Vec<(String, mysql::Value)>;
-
-    fn get_insert_sql(&self) -> String;
+    fn get_id_cond(&self) -> String;
+    fn get_params(&self) -> Vec<(String, Value)>;
+    fn get_params_id(&self) -> Vec<(String, Value)>;
+    fn from_row(mut row: mysql::conn::Row) -> Self;
 }
 
 pub struct DB {
@@ -23,20 +25,52 @@ pub struct DB {
 
 impl DB {
     pub fn insert<E: Entity + Clone>(&self, entity: &E) -> Result<E, Error> {
-        let stmt = self.pool.prepare(entity.get_insert_sql());
-        if stmt.is_err() {
-            return Err(stmt.unwrap_err());
+        let sql = format!("INSERT INTO {} SET {}", E::get_table(), E::get_prepare());
+        println!("{}", sql);
+        let res = self.pool.prep_exec(sql, entity.get_params());
+        match res {
+            Ok(res) => {
+                let mut ret = (*entity).clone();
+                ret.set_id(res.last_insert_id());
+                Ok(ret)
+            }
+            Err(err) => Err(err),
         }
-        let mut stmt = stmt.unwrap();
-        let res = stmt.execute(entity.get_params());
-        if res.is_err() {
-            return Err(res.unwrap_err());
+    }
+    pub fn update<E: Entity>(&self, entity: &E) -> Result<u64, Error> {
+        let sql = format!("UPDATE {} SET {} WHERE {}",
+                          E::get_table(),
+                          E::get_prepare(),
+                          entity.get_id_cond());
+        println!("{}", sql);
+        let res = self.pool.prep_exec(sql, entity.get_params());
+        match res {
+            Ok(res) => Ok(res.affected_rows()),
+            Err(err) => Err(err),
         }
-        let res = res.unwrap();
-        println!("{:?}", res);
-        let mut ret = (*entity).clone();
-        ret.set_id(res.last_insert_id());
-        Ok(ret)
+    }
+    pub fn get<E: Entity>(&self, id: u64) -> Result<Option<E>, Error> {
+        let sql = format!("SELECT {} FROM {} WHERE `id` = {}",
+                          E::get_fields(),
+                          E::get_table(),
+                          id);
+        println!("{}", sql);
+        let res = self.pool.first_exec(sql, ());
+        match res {
+            Ok(option) => Ok(option.map(|row| E::from_row(row))),
+            Err(err) => Err(err),
+        }
+    }
+    pub fn delete<E: Entity>(&self, entity: E) -> Result<u64, Error> {
+        let sql = format!("DELETE FROM {} WHERE {}",
+                          E::get_table(),
+                          entity.get_id_cond());
+        println!("{}", sql);
+        let res = self.pool.prep_exec(sql, ());
+        match res {
+            Ok(res) => Ok(res.affected_rows()),
+            Err(err) => Err(err),
+        }
     }
 }
 
