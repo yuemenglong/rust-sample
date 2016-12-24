@@ -9,7 +9,5 @@ hyper = "0.9.13"
 regex = "*"
 rustc-serialize = "0.3.21"
 
-[dependencies.mysql]
-version = "*"
-default-features = false
-features = ["pipe"]
+[dependencies.orm]
+path = "../orm"
